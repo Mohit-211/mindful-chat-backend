@@ -3,6 +3,11 @@ const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
 const { OpenAI } = require("openai");
+const bcrypt = require("bcrypt");
+const nodemailer = require("nodemailer");
+const db = require("./db");
+const path = require("path");
+const fs = require("fs");
 
 const app = express();
 app.use(cors());
@@ -12,7 +17,6 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// System prompt used for both models
 const SYSTEM_PROMPT = `You are an empathic friend with a deep understanding of psychology.
 People come to you with their issues.
 You provide them with comforting responses, and engage in conversations allowing them to speak and vent.
@@ -22,6 +26,7 @@ But really what you do is tackle it like a psychologist and a friend.
 You don't entertain random topics but stick to the user's private space, human behavior, and psychology in general.
 `;
 
+// Chat endpoint
 app.post("/api/chat", async (req, res) => {
   const { message, model, email } = req.body;
 
@@ -32,15 +37,13 @@ app.post("/api/chat", async (req, res) => {
   }
 
   try {
-    // Get user ID
     const [rows] = await db.query("SELECT id FROM users WHERE email = ?", [
       email,
     ]);
-    if (rows.length === 0) {
+    if (rows.length === 0)
       return res.status(404).json({ error: "User not found" });
-    }
-    const userId = rows[0].id;
 
+    const userId = rows[0].id;
     let botReply;
 
     if (model === "openai") {
@@ -62,7 +65,6 @@ app.post("/api/chat", async (req, res) => {
       botReply = response.data.response;
     }
 
-    // Save to DB
     await db.query(
       "INSERT INTO chats (user_id, message, response) VALUES (?, ?, ?)",
       [userId, message, botReply]
@@ -75,15 +77,7 @@ app.post("/api/chat", async (req, res) => {
   }
 });
 
-const PORT = 3000;
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Server running on port ${PORT}`);
-});
-
-const bcrypt = require("bcrypt");
-const nodemailer = require("nodemailer");
-const db = require("./db");
-
+// OTP generator
 function generateOTP() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
@@ -96,10 +90,11 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+// Register endpoint
 app.post("/api/register", async (req, res) => {
   const { name, email, phone, password } = req.body;
   const otp = generateOTP();
-  const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
+  const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
   try {
     const [existing] = await db.query("SELECT * FROM users WHERE email = ?", [
@@ -126,11 +121,12 @@ app.post("/api/register", async (req, res) => {
 
     res.json({ message: "OTP sent to email" });
   } catch (err) {
-    console.error(err.message);
+    console.error("Register error:", err.message);
     res.status(500).json({ error: "Server error" });
   }
 });
 
+// Verify OTP endpoint
 app.post("/api/verify-otp", async (req, res) => {
   const { email, otp } = req.body;
 
@@ -138,9 +134,8 @@ app.post("/api/verify-otp", async (req, res) => {
     const [rows] = await db.query("SELECT * FROM users WHERE email = ?", [
       email,
     ]);
-    if (rows.length === 0) {
+    if (rows.length === 0)
       return res.status(400).json({ error: "User not found" });
-    }
 
     const user = rows[0];
 
@@ -163,28 +158,25 @@ app.post("/api/verify-otp", async (req, res) => {
 
     res.json({ message: "Email verified successfully" });
   } catch (err) {
-    console.error(err.message);
+    console.error("OTP verification error:", err.message);
     res.status(500).json({ error: "Server error" });
   }
 });
 
+// Get chat history
 app.get("/api/chat/history", async (req, res) => {
   const { email } = req.query;
 
-  if (!email) {
-    return res.status(400).json({ error: "Email is required" });
-  }
+  if (!email) return res.status(400).json({ error: "Email is required" });
 
   try {
     const [rows] = await db.query("SELECT id FROM users WHERE email = ?", [
       email,
     ]);
-    if (rows.length === 0) {
+    if (rows.length === 0)
       return res.status(404).json({ error: "User not found" });
-    }
 
     const userId = rows[0].id;
-
     const [chats] = await db.query(
       "SELECT message, response, created_at FROM chats WHERE user_id = ? ORDER BY created_at ASC",
       [userId]
@@ -197,12 +189,27 @@ app.get("/api/chat/history", async (req, res) => {
   }
 });
 
-const path = require("path");
+// Serve React frontend
+const clientBuildPath = path.join(
+  __dirname,
+  "..",
+  "mindful-chat-frontend",
+  "build"
+);
 
-// Serve static files
-app.use(express.static(path.join(__dirname, "client", "build")));
+app.use(express.static(clientBuildPath));
 
-// Fallback route to serve index.html on refresh
-app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "client", "build", "index.html"));
+app.get(/^\/(?!api).*/, (req, res) => {
+  const indexFile = path.join(clientBuildPath, "index.html");
+  if (fs.existsSync(indexFile)) {
+    res.sendFile(indexFile);
+  } else {
+    res.status(404).send("Frontend not built or index.html not found.");
+  }
+});
+
+// Start server
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Server running on port ${PORT}`);
 });
