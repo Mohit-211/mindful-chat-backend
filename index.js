@@ -8,7 +8,12 @@ const authRoutes = require("./routes/authRoutes");
 const chatRoutes = require("./routes/chatRoutes");
 
 const app = express();
-app.use(cors());
+app.use(
+  cors({
+    origin: "https://madira.xyz",
+    credentials: true,
+  })
+);
 app.use(express.json());
 
 // Routes
