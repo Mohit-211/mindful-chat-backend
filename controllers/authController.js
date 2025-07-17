@@ -74,26 +74,46 @@ exports.login = async (req, res) => {
     const [rows] = await db.query("SELECT * FROM users WHERE email = ?", [
       email,
     ]);
+
     if (rows.length === 0)
       return res.status(400).json({ error: "Invalid credentials" });
 
     const user = rows[0];
     const isMatch = await bcrypt.compare(password, user.password_hash);
+
     if (!isMatch) return res.status(400).json({ error: "Invalid credentials" });
 
+    // ✅ Generate token
     const token = jwt.sign(
-      { userId: user.id, email: user.email },
+      { userId: user.id, email: user.email, name: user.name },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
-    res.json({ token });
+
+    // ✅ Return token and name
+    res.json({ token, name: user.name });
   } catch (err) {
     console.error("Login error:", err.message);
     res.status(500).json({ error: "Server error" });
   }
 };
+
 exports.logout = async (req, res) => {
   // No token invalidation server-side unless you're using token blacklists
   // Instead, we handle this on the client by deleting token from storage
   res.json({ message: "Logged out successfully" });
+};
+
+exports.me = async (req, res) => {
+  const userId = req.user.userId;
+  try {
+    const [rows] = await db.query(
+      "SELECT id, name, email FROM users WHERE id = ?",
+      [userId]
+    );
+    res.json(rows[0]);
+  } catch (err) {
+    console.error("Me error:", err.message);
+    res.status(500).json({ error: "Server error" });
+  }
 };
