@@ -11,10 +11,19 @@ const app = express();
 
 app.use(
   cors({
+    origin: true,
+    credentials: true,
+  })
+);
+
+/*
+app.use(
+  cors({
     origin: "https://madira.xyz",
     credentials: true,
   })
 );
+*/
 
 app.use(express.json());
 
@@ -24,7 +33,6 @@ app.use("/api", chatRoutes);
 app.get("/", (req, res) => {
   res.send("API is running.");
 });
-
 
 // Serve frontend
 const clientBuildPath = path.join(
