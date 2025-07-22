@@ -6,7 +6,7 @@ const fs = require("fs");
 
 const authRoutes = require("./routes/authRoutes");
 const chatRoutes = require("./routes/chatRoutes");
-
+const feedbackRoutes = require("./routes/feedback");
 const app = express();
 
 app.use(
@@ -30,6 +30,7 @@ app.use(express.json());
 // Routes
 app.use("/api", authRoutes);
 app.use("/api", chatRoutes);
+app.use("/api/feedback", feedbackRoutes);
 app.get("/", (req, res) => {
   res.send("API is running.");
 });
